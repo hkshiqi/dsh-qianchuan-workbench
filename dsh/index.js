@@ -6,6 +6,8 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import http from 'node:http'
 import https from 'node:https'
+import { createCollector } from './collector.js'
+import { getCookie as pfGetCookie, api as pfApi, operatePlans, setBudget, setRoi, setAssistBudget, listMaterials, buildTree, OPT } from './platform.js'
 
 export const name = 'dsh-qianchuan-workbench'
 export const inject = ['connection']
@@ -447,6 +449,114 @@ export function apply(ctx, config) {
       return { ok: true, activeAccount: st.activeAccount, accounts: st.settings.accounts }
     },
     /** 第 5 期：AI 操作建议（本地规则引擎，逐条给建议 + 理由 + 风险） */
+    // ══ 上下级联动：计划树（基础 → 追投/起量/调控）══
+    planTree: async (args) => {
+      const state = readState()
+      const accounts = resolveAccounts(state)
+      const acc = accounts[(args && args.account) || state.activeAccount] || Object.values(accounts)[0]
+      const snapRes = latestSnapshot(acc)
+      if (!snapRes.ok) return { ok: false, error: snapRes.error }
+      const snap = snapRes.snapshot
+      const side = String((args && args.side) || 'product') // product | live | brand
+      const GROUPS = {
+        product: { base: ['product'], child: ['productChase', 'productOnekeyRows'] },
+        live: { base: ['plans'], child: ['regulation', 'regulationDeleted', 'plansDeleted'] },
+        brand: { base: ['brand'], child: ['brandChase', 'brandOnekeyRows'] }
+      }
+      const g = GROUPS[side] || GROUPS.product
+      const tree = buildTree(snap, g)
+      const kw = String((args && args.search) || '').trim().toLowerCase()
+      let nodes = tree.nodes
+      if (kw) nodes = nodes.filter((n) => String(n.name).toLowerCase().includes(kw) || String(n.id).includes(kw))
+      return {
+        ok: true, side, at: snap.cycleAt, ageMin: snapRes.ageMin,
+        groups: tree.groups, total: tree.total, orphanCount: tree.orphans.length,
+        nodes: nodes.slice(0, 300), orphans: tree.orphans.slice(0, 50)
+      }
+    },
+
+    // ══ 素材级：某计划的素材清单（含消耗/状态）══
+    materials: async (args) => {
+      const state = readState()
+      const accounts = resolveAccounts(state)
+      const acc = accounts[(args && args.account) || state.activeAccount] || Object.values(accounts)[0]
+      const adId = String((args && args.adId) || '')
+      if (!adId) return { ok: false, error: '缺少 adId' }
+      const cred = await getCookie(acc, !!(args && args.force))
+      if (!cred.cookie) return { ok: false, error: '无凭证（请确认浏览器已登录千川）', via: cred.via }
+      const r = await listMaterials(cred.cookie, acc.aavid, adId, args || {})
+      return Object.assign({ via: cred.via }, r)
+    },
+
+    // ══ 写作：启停删 ══
+    planOperate: async (args) => {
+      const a = args || {}
+      const state = readState()
+      const accounts = resolveAccounts(state)
+      const acc = accounts[a.account || state.activeAccount] || Object.values(accounts)[0]
+      const ids = Array.isArray(a.ids) ? a.ids : (a.id ? [a.id] : [])
+      if (!ids.length) return { ok: false, error: '缺少 ids' }
+      const opt = Number(a.opt)
+      if (![1, 2, 3].includes(opt)) return { ok: false, error: 'opt 必须是 1(启动)/2(暂停)/3(删除)' }
+      // ★ 写操作默认关闭（用户规则：平台写动作常态停用，须显式开启）
+      if (!a.confirm) return { ok: false, dryRun: true, needConfirm: true, action: opt === 1 ? '启动' : opt === 2 ? '暂停' : '删除', count: ids.length, ids: ids.slice(0, 50), error: '写操作需显式确认（confirm:true）' }
+      const cred = await getCookie(acc, true)
+      if (!cred.cookie) return { ok: false, error: '无凭证' }
+      const r = await operatePlans(cred.cookie, acc.aavid, ids, opt)
+      return Object.assign({ via: cred.via, action: opt === 1 ? '启动' : opt === 2 ? '暂停' : '删除' }, r)
+    },
+
+    // ══ 写作：改预算 ══
+    setBudget: async (args) => {
+      const a = args || {}
+      const state = readState()
+      const accounts = resolveAccounts(state)
+      const acc = accounts[a.account || state.activeAccount] || Object.values(accounts)[0]
+      const entries = Array.isArray(a.entries) ? a.entries : (a.id ? [{ id: a.id, yuan: a.yuan }] : [])
+      if (!entries.length) return { ok: false, error: '缺少 entries [{id, yuan}]' }
+      if (!a.confirm) return { ok: false, dryRun: true, needConfirm: true, count: entries.length, entries: entries.slice(0, 50), error: '写操作需显式确认（confirm:true）' }
+      const cred = await getCookie(acc, true)
+      if (!cred.cookie) return { ok: false, error: '无凭证' }
+      const r = await setBudget(cred.cookie, acc.aavid, entries)
+      return Object.assign({ via: cred.via }, r)
+    },
+
+    // ══ 写作：改 ROI 目标 ══
+    setRoi: async (args) => {
+      const a = args || {}
+      const state = readState()
+      const accounts = resolveAccounts(state)
+      const acc = accounts[a.account || state.activeAccount] || Object.values(accounts)[0]
+      const entries = Array.isArray(a.entries) ? a.entries : (a.id ? [{ id: a.id, roi: a.roi }] : [])
+      if (!entries.length) return { ok: false, error: '缺少 entries [{id, roi}]' }
+      if (!a.confirm) return { ok: false, dryRun: true, needConfirm: true, count: entries.length, entries: entries.slice(0, 50), error: '写操作需显式确认（confirm:true）' }
+      const cred = await getCookie(acc, true)
+      if (!cred.cookie) return { ok: false, error: '无凭证' }
+      const r = await setRoi(cred.cookie, acc.aavid, entries)
+      return Object.assign({ via: cred.via }, r)
+    },
+
+    // ══ 采集：在工作台内直接跑一轮（含直播时段自动分档）══
+    collect: async (args) => {
+      const a = args || {}
+      const state = readState()
+      const accounts = resolveAccounts(state)
+      const acc = accounts[a.account || state.activeAccount] || Object.values(accounts)[0]
+      if (!acc.dataRoot) return { ok: false, error: '该账号未配置采集目录（dataRoot）' }
+      const cred = await getCookie(acc, true)
+      if (!cred.cookie) return { ok: false, error: '无凭证（请确认浏览器已登录千川）', via: cred.via }
+      const bjH = Number(new Date(Date.now() + 8 * 3600e3).toISOString().slice(11, 13))
+      const productOnly = a.productOnly != null ? !!a.productOnly : (bjH >= 0 && bjH < 6)
+      const t0 = Date.now()
+      const coll = createCollector({
+        cookie: cred.cookie, aavid: acc.aavid, port: acc.port,
+        roomId: acc.roomId, anchorId: acc.anchorId, root: acc.dataRoot,
+        productOnly
+      })
+      const r = await coll.run()
+      return Object.assign({ ok: true, via: cred.via, elapsedMs: Date.now() - t0, bjHour: bjH, productOnly }, r)
+    },
+
     advice: async (args) => {
       const _st = readState()
       const acc = resolveAccounts(_st)[String((args && args.account) || _st.activeAccount)] 

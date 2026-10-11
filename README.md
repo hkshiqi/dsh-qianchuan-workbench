@@ -1,3 +1,8 @@
+> **v2.0.0 架构变更（2026-10-12）**：采集器与平台读写接口已**内嵌进插件**，不再依赖外部 qc_scripts 目录。
+> 关键实测结论：千川接口**不需要签名**（a_bogus / msToken / X-Bogus 均 0 次），浏览器只负责提供登录 Cookie。
+> 因此 2100+ 行采集逻辑用「Node 侧 page 垫片」原样搬入 `dsh/collector.js`，纯 HTTP 运行。
+> 新增：上下级联动计划树（基础→追投/起量/调控，靠 primaryAID 关联）、素材级接口、计划调整（启停/预算/ROI，带三重确认闸）。
+
 # dsh-qianchuan-workbench · 千川投流工作台（内容模块）
 
 > **本包不是框架**，是跑在 [`dsh-workbench-console`](https://github.com/hkshiqi/dsh-workbench-console) 工作台框架上的一块内容。
