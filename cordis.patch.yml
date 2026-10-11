@@ -1,0 +1,6 @@
+# dsh-qianchuan-workbench bundle patch
+# 安装后由 profile 的启动链加载：本文件把服务端入口插入插件树。
+# 安装：dsh plugin --profile web add dsh-qianchuan-workbench
+- insert:
+    - id: qianchuan-workbench
+      name: 'dsh-qianchuan-workbench'

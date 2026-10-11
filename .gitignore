@@ -1,0 +1,8 @@
+node_modules/
+*.tgz
+_selftest/
+_rt/
+_data/
+*.log
+.DS_Store
+state.json
