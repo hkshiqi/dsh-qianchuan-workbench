@@ -50,6 +50,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/hongwei/dsh-qianchuan-workbench.git"
-  }
+    "url": "git+https://github.com/hkshiqi/dsh-qianchuan-workbench.git"
+  },
+  "homepage": "https://github.com/hkshiqi/dsh-qianchuan-workbench#readme",
+  "bugs": {
+    "url": "https://github.com/hkshiqi/dsh-qianchuan-workbench/issues"
+  },
+  "author": "hkshiqi"
 }
