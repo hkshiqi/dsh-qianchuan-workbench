@@ -182,7 +182,8 @@ export function apply(ctx, config) {
 
   /** 读既定采集链路的最新产物（全量、已归一化） */
   function latestSnapshot(acc) {
-    if (!acc.dataRoot || !existsSync(acc.dataRoot)) return { ok: false, error: '未配置采集目录：' + acc.dataRoot }
+    if (!acc.dataRoot) return { ok: false, error: '未配置采集目录：请在工作台「设置」页填写你的采集脚本输出目录（例如 D:\\千川项目）' }
+    if (!existsSync(acc.dataRoot)) return { ok: false, error: '采集目录不存在：' + acc.dataRoot + '（请检查路径是否正确）' }
     let files = []
     try {
       files = readdirSync(acc.dataRoot)
@@ -192,7 +193,7 @@ export function apply(ctx, config) {
         .map((x) => ({ d: x.d, p: x.p, m: statSync(x.p).mtimeMs }))
         .sort((a, b) => b.m - a.m)
     } catch { return { ok: false, error: '读取采集目录失败' } }
-    if (files.length === 0) return { ok: false, error: '未找到 cycle_snapshot.json 产物' }
+    if (files.length === 0) return { ok: false, error: '该目录下没有采集产物：需要一个名为 qc_data_cycle15_YYYYMMDD_HHMM 的子目录，且内含 cycle_snapshot.json' }
     try {
       const snap = JSON.parse(readFileSync(files[0].p, 'utf8'))
       const rp = join(acc.dataRoot, files[0].d, 'review_report.md')
