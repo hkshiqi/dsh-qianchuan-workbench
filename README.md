@@ -1,4 +1,7 @@
-# dsh-qianchuan-workbench · 千川投流工作台
+# dsh-qianchuan-workbench · 千川投流工作台（内容模块）
+
+> **本包不是框架**，是跑在 [`dsh-workbench-console`](https://github.com/hkshiqi/dsh-workbench-console) 工作台框架上的一块内容。
+> 它把自己注册进框架的工作台列表，不单独占侧边栏席位。
 
 > 给千川投流手的**决策工作台**——不是又一个报表，而是「现在该动哪条计划」。
 
@@ -6,7 +9,10 @@
 
 ## 安装
 
+**必须先装框架**（本包依赖它提供的 `workbenchConsole` 服务）：
+
 ```sh
+dsh plugin --profile web add dsh-workbench-console
 dsh plugin --profile web add dsh-qianchuan-workbench
 ```
 
